@@ -287,7 +287,7 @@
         function onScanSuccess(decodedText) {
             const ticketNumber = decodedText.split(":")[0];
 
-            fetch("http://localhost:5000/verify-ticket", {
+            fetch("https://ticketverbackend.onrender.com/verify-ticket", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ ticket_id: decodedText })
