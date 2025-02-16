@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ticket Verification System</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Poppins:wght@300;400;600&display=swap"
+        rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            margin-top: 35px;
+            height: 100vh;
+            background: linear-gradient(180deg, #0A0F29, #1C315E, #09203F);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            color: white;
+            font-family: 'Poppins', sans-serif;
+            will-change: transform;
+            overflow: hidden;
+        }
+
+        .event-container {
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        .event-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 80px;
+            margin: 0;
+            line-height: 1;
+        }
+
+        .event-year {
+            font-size: 28px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-weight: 600;
+            position: absolute;
+            margin-left: 10px;
+        }
+
+        .highlight {
+            display: inline-block;
+            position: relative;
+        }
+
+        .highlight .event-year {
+            position: absolute;
+            top: -30px;
+            right: -35px;
+            background: transparent;
+            color: white;
+        }
+
+        .event-subtitle {
+            font-size: 18px;
+            color: #dbe1e8;
+            margin-top: -5px;
+        }
+
+        .scanner-section {
+            margin-top: 20px;
+            text-align: center;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #qr-reader {
+            width: 100vw;
+            max-width: 300px;
+            aspect-ratio: 1;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            overflow: hidden;
+            display: none;
+            position: relative;
+        }
+
+        #qr-reader video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .toggle-btn {
+            margin-top: 10px;
+            padding: 12px 24px;
+            background-color: #052df5;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        #qr-reader-results {
+            margin-top: 15px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        #status-card-container {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 1000;
+            display: none;
+            width: 80%;
+            max-width: 300px;
+            text-align: center;
+        }
+
+        #overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: transparent;
+            z-index: 999;
+            display: none;
+        }
+
+        .status-card {
+            font-size: 20px;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+
+        .status-card h2 {
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+
+        .status-card .ticket-info {
+            margin-top: 20px;
+            text-align: left;
+            text-align: center;
+        }
+
+        .status-card button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 15px;
+        }
+
+        .status-card.valid {
+            background: linear-gradient(135deg, #4CAF50, #2E7D32);
+            color: white;
+        }
+
+        .status-card.invalid {
+            background: linear-gradient(135deg, #F44336, #B71C1C);
+            color: white;
+        }
+
+        .status-card.used {
+            background: linear-gradient(135deg, #FFA500, #FF7043);
+            color: white;
+        }
+
+        .status-card.vip {
+            background: linear-gradient(135deg, #8E24AA, #6A1B9A);
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="event-container">
+        <h1 class="event-title">
+            <span class="highlight">MALANG <span class="event-year">2K25</span></span>
+        </h1>
+        <p class="event-subtitle">SURRENDER TO THE SOUND</p>
+    </div>
+
+    <div class="scanner-section">
+        <div id="qr-reader"></div>
+        <button id="toggle-camera" class="toggle-btn">Start Camera</button>
+    </div>
+
+    <div id="overlay"></div>
+    <div id="status-card-container"></div>
+    <script>
+        let qrScanner;
+        let cameraRunning = false;
+        const toggleButton = document.getElementById('toggle-camera');
+
+        function showStatusCard(status, ticketData = {}) {
+            const scanner = document.getElementById('qr-reader');
+            scanner.style.display = 'none';
+
+            const statusCardContainer = document.getElementById('status-card-container');
+            const overlay = document.getElementById('overlay');
+            let statusCardContent = '';
+            let statusClass = '';
+
+            if (status === 'unused') {
+                statusClass = 'valid';
+                statusCardContent = `
+                    <div class="status-card ${statusClass}">
+                        <h2>VALID</h2>
+                        <div class="ticket-info">
+                            <p>Ticket ID: ${ticketData.ticketId}</p>
+                            <p>Valid QR Code</p>
+                        </div>
+                        <button onclick="hideStatusCard()"><strong>SCAN NEW TICKET</strong></button>
+                    </div>
+                `;
+            } else if (status === 'used') {
+                statusClass = 'used';
+                statusCardContent = `
+                    <div class="status-card ${statusClass}">
+                        <h2>USED</h2>
+                        <div class="ticket-info">
+                            <p>Ticket ID: ${ticketData.ticketId}</p>
+                            <p>Used QR Code, Check!</p>
+                        </div>
+                        <button onclick="hideStatusCard()"><strong>SCAN NEW TICKET</strong></button>
+                    </div>
+                `;
+            } else if (status === 'vip') {
+                statusClass = 'vip';
+                statusCardContent = `
+                    <div class="status-card ${statusClass}">
+                        <h2>VIP TICKET</h2>
+                        <div class="ticket-info">
+                            <p>Ticket ID: ${ticketData.ticketId}</p>
+                            <p>Valid VIP QR Code</p>
+                        </div>
+                        <button onclick="hideStatusCard()"><strong>SCAN NEW TICKET</strong></button>
+                    </div>
+                `;
+            } else {
+                statusClass = 'invalid';
+                statusCardContent = `
+                    <div class="status-card ${statusClass}">
+                        <h2>INVALID</h2>
+                        <p>Invalid QR Code</p>
+                        <button onclick="hideStatusCard()"><strong>SCAN NEW TICKET</strong></button>
+                    </div>
+                `;
+            }
+
+            statusCardContainer.innerHTML = statusCardContent;
+            statusCardContainer.style.display = 'block';
+            overlay.style.display = 'block';
+
+            toggleButton.style.display = 'none';
+        }
+        function hideStatusCard() {
+            const scanner = document.getElementById('qr-reader');
+            scanner.style.display = 'block';
+
+            const statusCardContainer = document.getElementById('status-card-container');
+            const overlay = document.getElementById('overlay');
+            statusCardContainer.style.display = 'none';
+            overlay.style.display = 'none';
+
+            toggleButton.style.display = 'block';
+
+            if (qrScanner) {
+                qrScanner.resume();
+            }
+        }
+        function onScanSuccess(decodedText) {
+            const ticketNumber = decodedText.split(":")[0];
+
+            fetch("http://localhost:5000/verify-ticket", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ticket_id: decodedText })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    let status = data.status;
+                    let type = data.type; // vip or regular
+                    let ticketData = { ticketId: ticketNumber, type };
+
+                    console.log("API Response:", data);
+                    if (status === "unused" && type === "vip") {
+                        showStatusCard("vip", ticketData);
+                    } else if (status === "unused") {
+                        showStatusCard("unused", ticketData);
+                    } else if (status === "used") {
+                        showStatusCard("used", ticketData);
+                    } else if (status === "invalid") {
+                        showStatusCard("invalid", ticketData);
+                    }
+                })
+
+                .catch(error => console.error("Error verifying ticket:", error));
+
+            if (qrScanner) {
+                qrScanner.pause();
+            }
+        }
+
+        toggleButton.addEventListener('click', function () {
+            const qrReaderDiv = document.getElementById('qr-reader');
+
+            if (!cameraRunning) {
+                qrScanner = new Html5Qrcode("qr-reader");
+                qrReaderDiv.style.display = 'block';
+
+                qrScanner.start({
+                    facingMode: "environment"
+                }, {
+                    fps: 15,
+                    qrbox: (viewfinderWidth, viewfinderHeight) => {
+                        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                        return {
+                            width: minEdge * 0.8,
+                            height: minEdge * 0.8
+                        };
+                    },
+                    useBarCodeDetectorIfSupported: true
+                }, onScanSuccess).catch(err => {
+                    console.error('Camera Start Error:', err);
+                    alert("Camera failed to start. Check permissions or try a different camera.");
+                });
+
+                toggleButton.innerText = 'Stop Camera';
+                cameraRunning = true;
+            } else {
+                qrScanner.stop().then(() => {
+                    qrReaderDiv.innerHTML = '';
+                    qrReaderDiv.style.display = 'none';
+                    toggleButton.innerText = 'Start Camera';
+                    cameraRunning = false;
+                    document.getElementById('status-card-container').innerHTML = '';
+                }).catch(err => console.error('Camera Stop Error:', err));
+            }
+        });
+    </script>
+</body>
+
+</html>
