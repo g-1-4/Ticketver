@@ -80,10 +80,9 @@ let qrScanner;
             }
         }
         function onScanSuccess(decodedText) {
-            // Extract only the ticket number (before the colon `:`)
             const ticketNumber = decodedText.split(":")[0];
-    
-            fetch("http://localhost:5000/verify-ticket", {
+
+            fetch("https://ticketverbackend.onrender.com/verify-ticket", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ ticket_id: decodedText })
@@ -91,25 +90,29 @@ let qrScanner;
                 .then(response => response.json())
                 .then(data => {
                     let status = data.status;
-                    let ticketData = { ticketId: ticketNumber };
-    
-                    if (status === "used") {
-                        showStatusCard("used", ticketData);
-                    } else if (status === "vip") {
+                    let type = data.type; // vip or regular
+                    let ticketData = { ticketId: ticketNumber, type };
+
+                    console.log("API Response:", data);
+                    if (status === "unused" && type === "vip") {
                         showStatusCard("vip", ticketData);
                     } else if (status === "unused") {
-                        showStatusCard("unused", ticketData)
-                    } else {
+                        showStatusCard("unused", ticketData);
+                    } else if (status === "used") {
+                        showStatusCard("used", ticketData);
+                    } else if (status === "invalid") {
                         showStatusCard("invalid", ticketData);
                     }
                 })
+
                 .catch(error => console.error("Error verifying ticket:", error));
-    
+
             if (qrScanner) {
                 qrScanner.pause();
             }
         }
-        toggleButton.addEventListener('click', function() {
+
+        toggleButton.addEventListener('click', function () {
             const qrReaderDiv = document.getElementById('qr-reader');
 
             if (!cameraRunning) {
@@ -117,18 +120,18 @@ let qrScanner;
                 qrReaderDiv.style.display = 'block';
 
                 qrScanner.start({
-    facingMode: "environment"
-}, {
-    fps: 15,  
-    qrbox: (viewfinderWidth, viewfinderHeight) => {
-        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-        return {
-            width: minEdge * 0.8, 
-            height: minEdge * 0.8
-        };
-    },
-    useBarCodeDetectorIfSupported: true
-}, onScanSuccess).catch(err => {
+                    facingMode: "environment"
+                }, {
+                    fps: 15,
+                    qrbox: (viewfinderWidth, viewfinderHeight) => {
+                        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                        return {
+                            width: minEdge * 0.8,
+                            height: minEdge * 0.8
+                        };
+                    },
+                    useBarCodeDetectorIfSupported: true
+                }, onScanSuccess).catch(err => {
                     console.error('Camera Start Error:', err);
                     alert("Camera failed to start. Check permissions or try a different camera.");
                 });
