@@ -9,6 +9,7 @@
         href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Poppins:wght@300;400;600&display=swap"
         rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             margin: 0;
@@ -197,12 +198,220 @@
 
     <div class="scanner-section">
         <div id="qr-reader"></div>
-        <button id="toggle-camera" class="toggle-btn">Start Camera</button>
+        <div style="display: flex; gap: 10px;">
+            <button id="toggle-camera" class="toggle-btn">Start Camera</button>
+            <button id="view-insights" class="toggle-btn">View Insights</button>
+        </div>
+    </div>
+    <div id="insights-container" style="display: none; text-align: center; margin-top: 20px;">
+        <h2>Scanning Insights</h2>
+        <p><strong>Total Tickets Scanned:</strong> <span id="total-scanned">0</span></p>
+        <canvas id="insights-chart" width="300" height="200"></canvas>
     </div>
 
     <div id="overlay"></div>
     <div id="status-card-container"></div>
-    <script src="script.js"></script>
+    <script>
+        let qrScanner;
+        let cameraRunning = false;
+        const toggleButton = document.getElementById('toggle-camera');
+
+        function showStatusCard(status, ticketData = {}) {
+            const scanner = document.getElementById('qr-reader');
+            scanner.style.display = 'none';
+
+            const statusCardContainer = document.getElementById('status-card-container');
+            const overlay = document.getElementById('overlay');
+            let statusCardContent = '';
+            let statusClass = '';
+
+            if (status === 'unused') {
+                statusClass = 'valid';
+                statusCardContent = `
+                    <div class="status-card ${statusClass}">
+                        <h2>VALID</h2>
+                        <div class="ticket-info">
+                            <p>Ticket ID: ${ticketData.ticketId}</p>
+                            <p>Valid QR Code</p>
+                        </div>
+                        <button onclick="hideStatusCard()"><strong>SCAN NEW TICKET</strong></button>
+                    </div>
+                `;
+            } else if (status === 'used') {
+                statusClass = 'used';
+                statusCardContent = `
+                    <div class="status-card ${statusClass}">
+                        <h2>USED</h2>
+                        <div class="ticket-info">
+                            <p>Ticket ID: ${ticketData.ticketId}</p>
+                            <p>Used QR Code, Check!</p>
+                        </div>
+                        <button onclick="hideStatusCard()"><strong>SCAN NEW TICKET</strong></button>
+                    </div>
+                `;
+            } else if (status === 'vip') {
+                statusClass = 'vip';
+                statusCardContent = `
+                    <div class="status-card ${statusClass}">
+                        <h2>VIP TICKET</h2>
+                        <div class="ticket-info">
+                            <p>Ticket ID: ${ticketData.ticketId}</p>
+                            <p>Valid VIP QR Code</p>
+                        </div>
+                        <button onclick="hideStatusCard()"><strong>SCAN NEW TICKET</strong></button>
+                    </div>
+                `;
+            } else {
+                statusClass = 'invalid';
+                statusCardContent = `
+                    <div class="status-card ${statusClass}">
+                        <h2>INVALID</h2>
+                        <p>Invalid QR Code</p>
+                        <button onclick="hideStatusCard()"><strong>SCAN NEW TICKET</strong></button>
+                    </div>
+                `;
+            }
+
+            statusCardContainer.innerHTML = statusCardContent;
+            statusCardContainer.style.display = 'block';
+            overlay.style.display = 'block';
+
+            toggleButton.style.display = 'none';
+        }
+        function hideStatusCard() {
+            const scanner = document.getElementById('qr-reader');
+            scanner.style.display = 'block';
+
+            const statusCardContainer = document.getElementById('status-card-container');
+            const overlay = document.getElementById('overlay');
+            statusCardContainer.style.display = 'none';
+            overlay.style.display = 'none';
+
+            toggleButton.style.display = 'block';
+
+            if (qrScanner) {
+                qrScanner.resume();
+            }
+        }
+        function onScanSuccess(decodedText) {
+            const ticketNumber = decodedText.split(":")[0];
+
+            fetch("https://ticketverbackend.onrender.com/verify-ticket", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ticket_id: decodedText })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    let status = data.status;
+                    let type = data.type; // vip or regular
+                    let ticketData = { ticketId: ticketNumber, type };
+
+                    console.log("API Response:", data);
+                    if (status === "unused" && type === "vip") {
+                        showStatusCard("vip", ticketData);
+                    } else if (status === "unused") {
+                        showStatusCard("unused", ticketData);
+                    } else if (status === "used") {
+                        showStatusCard("used", ticketData);
+                    } else if (status === "invalid") {
+                        showStatusCard("invalid", ticketData);
+                    }
+                })
+
+                .catch(error => console.error("Error verifying ticket:", error));
+
+            if (qrScanner) {
+                qrScanner.pause();
+            }
+        }
+
+        toggleButton.addEventListener('click', function () {
+            const qrReaderDiv = document.getElementById('qr-reader');
+
+            if (!cameraRunning) {
+                qrScanner = new Html5Qrcode("qr-reader");
+                qrReaderDiv.style.display = 'block';
+
+                qrScanner.start({
+                    facingMode: "environment"
+                }, {
+                    fps: 15,
+                    qrbox: (viewfinderWidth, viewfinderHeight) => {
+                        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                        return {
+                            width: minEdge * 0.8,
+                            height: minEdge * 0.8
+                        };
+                    },
+                    useBarCodeDetectorIfSupported: true
+                }, onScanSuccess).catch(err => {
+                    console.error('Camera Start Error:', err);
+                    alert("Camera failed to start. Check permissions or try a different camera.");
+                });
+
+                toggleButton.innerText = 'Stop Camera';
+                cameraRunning = true;
+            } else {
+                qrScanner.stop().then(() => {
+                    qrReaderDiv.innerHTML = '';
+                    qrReaderDiv.style.display = 'none';
+                    toggleButton.innerText = 'Start Camera';
+                    cameraRunning = false;
+                    document.getElementById('status-card-container').innerHTML = '';
+                }).catch(err => console.error('Camera Stop Error:', err));
+            }
+        });
+        let totalScanned = 0;
+    let ticketCounts = { valid: 0, used: 0, invalid: 0, vip: 0 };
+    let chart;
+
+    function updateInsights(status) {
+        totalScanned++;
+        ticketCounts[status]++;
+        document.getElementById("total-scanned").innerText = totalScanned;
+        if (chart) {
+            chart.data.datasets[0].data = Object.values(ticketCounts);
+            chart.update();
+        }
+    }
+
+    function setupChart() {
+        const ctx = document.getElementById('insights-chart').getContext('2d');
+        chart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ["Valid", "Used", "VIP"],
+                datasets: [{
+                    label: 'Ticket Scans',
+                    data: [0, 0, 0, 0],
+                    backgroundColor: ["#4CAF50", "#FFA500", "#8E24AA"]
+                }]
+            }
+        });
+    }
+
+    document.getElementById("view-insights").addEventListener("click", function () {
+        const insightsContainer = document.getElementById("insights-container");
+        insightsContainer.style.display = insightsContainer.style.display === "none" ? "block" : "none";
+        if (!chart) setupChart();
+    });
+
+    function onScanSuccess(decodedText) {
+        fetch("https://ticketverbackend.onrender.com/verify-ticket", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ticket_id: decodedText })
+        })
+        .then(response => response.json())
+        .then(data => {
+            let status = data.status;
+            let type = data.type;
+            updateInsights(status === "unused" && type === "vip" ? "vip" : status);
+        })
+        .catch(error => console.error("Error verifying ticket:", error));
+    }
+    </script>
 </body>
 
 </html>
